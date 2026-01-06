@@ -6,3 +6,4 @@ requests
 streamlit-option-menu
 streamlit-aggrid
 bcrypt
+openpyxl
