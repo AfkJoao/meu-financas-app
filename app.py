@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import plotly.graph_objects as go
 import sqlite3
 import bcrypt
 import time
@@ -15,113 +14,171 @@ from streamlit_lottie import st_lottie
 # --- CONFIGURAÇÃO DA PÁGINA ---
 st.set_page_config(page_title="FinFuture OS", page_icon="💠", layout="wide")
 
-# --- ASSETS DE ANIMAÇÃO (LOTTIE) ---
-# URLs de animações minimalistas (Json)
+# --- DICIONÁRIO DE TRADUÇÃO COMPLETO (PT/EN) ---
+TRANS = {
+    'PT': {
+        'fmt': 'DD/MM/YYYY',
+        # Login
+        'login_title': 'ACESSO AO SISTEMA',
+        'login_subtitle': 'Ambiente Seguro FinFuture v5.0',
+        'tab_auth': 'AUTENTICAR',
+        'tab_create': 'CRIAR CONTA',
+        'user_ph': 'ID / Usuário',
+        'pass_ph': 'Chave / Senha',
+        'name_ph': 'Nome de Exibição',
+        'btn_connect': 'CONECTAR',
+        'btn_create': 'CRIAR PERFIL',
+        'spin_connect': 'Estabelecendo conexão segura...',
+        'err_access': 'Acesso Negado: Credenciais Inválidas',
+        'success_create': 'Perfil Criado com Sucesso',
+        'err_conflict': 'ID de Usuário já existe',
+        # Menu
+        'm_dash': 'Painel Geral',
+        'm_new': 'Nova Operação',
+        'm_imp': 'Importar Dados (ETL)',
+        'm_wallet': 'Banco de Dados',
+        'm_cfg': 'Configurações',
+        'btn_disc': 'DESCONECTAR',
+        # Dashboard
+        'd_title': 'VISÃO GERAL',
+        'd_no_data': 'Nenhum fluxo de dados detectado.',
+        'k_net': 'PATRIMÔNIO',
+        'k_assets': 'ATIVOS',
+        'k_trans': 'REGISTROS',
+        'k_market': 'STATUS MERCADO',
+        'g_alloc': 'ALOCAÇÃO DE ATIVOS',
+        'g_evol': 'EVOLUÇÃO PATRIMONIAL',
+        # Nova Operação
+        'n_title': 'TERMINAL DE ENTRADA',
+        'n_date': 'DATA',
+        'n_type': 'TIPO',
+        'n_asset': 'CÓDIGO DO ATIVO',
+        'n_qty': 'QUANTIDADE',
+        'n_price': 'PREÇO UNITÁRIO',
+        'btn_exec': 'EXECUTAR TRANSAÇÃO',
+        'success_up': 'DADOS ENVIADOS',
+        # Importar
+        'i_title': 'LINK DE DADOS (ETL)',
+        'i_desc': 'Formatos suportados: .XLSX, .CSV',
+        'i_drop': 'ARRASTE O ARQUIVO AQUI',
+        'btn_init': 'INICIAR SEQUÊNCIA',
+        'st_parse': 'Lendo cabeçalhos...',
+        'st_map': 'Mapeando tipos...',
+        'st_inject': 'Injetando no SQL...',
+        'i_complete': 'Lote Processado.',
+        # Carteira
+        'w_title': 'VISUALIZADOR DE DADOS',
+        'w_empty': 'Banco de Dados Vazio.',
+        # Config
+        'c_title': 'CONFIGURAÇÃO DO SISTEMA',
+        'c_backup': 'BACKUP DE DADOS (SQLITE)',
+        'c_desc': 'Baixe seu banco de dados para não perder informações se o servidor reiniciar.',
+        'btn_dl': 'BAIXAR ARQUIVO .DB'
+    },
+    'EN': {
+        'fmt': 'MM/DD/YYYY',
+        # Login
+        'login_title': 'SYSTEM ACCESS',
+        'login_subtitle': 'Secure FinFuture Environment v5.0',
+        'tab_auth': 'AUTHENTICATE',
+        'tab_create': 'INITIALIZE',
+        'user_ph': 'ID / Username',
+        'pass_ph': 'Key / Password',
+        'name_ph': 'Display Name',
+        'btn_connect': 'CONNECT',
+        'btn_create': 'CREATE PROFILE',
+        'spin_connect': 'Handshaking...',
+        'err_access': 'Access Denied',
+        'success_create': 'Profile Created',
+        'err_conflict': 'ID Conflict',
+        # Menu
+        'm_dash': 'Overview',
+        'm_new': 'New Operation',
+        'm_imp': 'Data Link (Import)',
+        'm_wallet': 'Database View',
+        'm_cfg': 'System Config',
+        'btn_disc': 'DISCONNECT',
+        # Dashboard
+        'd_title': 'OVERVIEW',
+        'd_no_data': 'No Data Stream Detected.',
+        'k_net': 'NET WORTH',
+        'k_assets': 'ASSETS',
+        'k_trans': 'TRANSACTIONS',
+        'k_market': 'MARKET STATUS',
+        'g_alloc': 'ASSET ALLOCATION',
+        'g_evol': 'WEALTH EVOLUTION',
+        # New Operation
+        'n_title': 'INPUT TERMINAL',
+        'n_date': 'DATE',
+        'n_type': 'TYPE',
+        'n_asset': 'ASSET ID',
+        'n_qty': 'QUANTITY',
+        'n_price': 'UNIT PRICE',
+        'btn_exec': 'EXECUTE TRANSACTION',
+        'success_up': 'DATA UPLOADED',
+        # Import
+        'i_title': 'DATA LINK (ETL)',
+        'i_desc': 'Supported formats: .XLSX, .CSV',
+        'i_drop': 'DROP FILE HERE',
+        'btn_init': 'INITIATE SEQUENCE',
+        'st_parse': 'Parsing headers...',
+        'st_map': 'Mapping data types...',
+        'st_inject': 'Injecting into SQL...',
+        'i_complete': 'Batch Processed.',
+        # Wallet
+        'w_title': 'DATABASE VIEW',
+        'w_empty': 'Database Empty.',
+        # Config
+        'c_title': 'SYSTEM CONFIG',
+        'c_backup': 'DATA BACKUP (SQLITE)',
+        'c_desc': 'Download your database to prevent data loss on server restart.',
+        'btn_dl': 'DOWNLOAD .DB FILE'
+    }
+}
+
+# --- ASSETS (LOTTIE) ---
 LOTTIE_ASSETS = {
-    "finance": "https://assets10.lottiefiles.com/packages/lf20_w51pcehl.json", # Gráfico Tech
-    "login": "https://assets9.lottiefiles.com/packages/lf20_h9kds1my.json",    # Cadeado Biométrico
-    "wallet": "https://assets3.lottiefiles.com/packages/lf20_yzoqyyqf.json",   # Carteira Digital
-    "success": "https://assets9.lottiefiles.com/packages/lf20_jbrw3hcz.json",  # Checkmark limpo
-    "loading": "https://assets5.lottiefiles.com/packages/lf20_t9gkkhz4.json"   # Loading circular
+    "finance": "https://assets10.lottiefiles.com/packages/lf20_w51pcehl.json",
+    "login": "https://assets9.lottiefiles.com/packages/lf20_h9kds1my.json",
+    "wallet": "https://assets3.lottiefiles.com/packages/lf20_yzoqyyqf.json"
 }
 
 def load_lottieurl(url):
     try:
         r = requests.get(url)
-        if r.status_code != 200: return None
-        return r.json()
+        return r.json() if r.status_code == 200 else None
     except: return None
 
 # --- CSS TECH-MINIMALISTA ---
 st.markdown("""
 <style>
-    /* Importando Fonte Futurista (Rajdhani ou Roboto Mono) */
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&family=Roboto+Mono:wght@400;700&display=swap');
-
-    html, body, [class*="css"] {
-        font-family: 'Inter', sans-serif;
-    }
-
-    /* Fundo Dark Profundo */
-    .stApp {
-        background-color: #0E1117;
-        background-image: radial-gradient(circle at 50% 0%, rgba(0, 212, 255, 0.1) 0%, transparent 50%);
-    }
-
-    /* Removendo bordas padrão do Streamlit */
-    header {visibility: hidden;}
-    footer {visibility: hidden;}
-
-    /* Containers com Efeito Vidro (Glassmorphism) */
+    html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
+    .stApp { background-color: #0E1117; background-image: radial-gradient(circle at 50% 0%, rgba(0, 212, 255, 0.05) 0%, transparent 50%); }
     .tech-card {
-        background: rgba(255, 255, 255, 0.03);
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        border-radius: 12px;
-        padding: 20px;
-        backdrop-filter: blur(10px);
-        margin-bottom: 20px;
-        transition: all 0.3s ease;
+        background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 12px; padding: 20px; backdrop-filter: blur(10px); margin-bottom: 20px;
     }
-    .tech-card:hover {
-        border-color: #00d4ff;
-        box-shadow: 0 0 15px rgba(0, 212, 255, 0.1);
-    }
-
-    /* Inputs Estilizados */
     .stTextInput input, .stSelectbox div[data-baseweb="select"], .stDateInput input, .stNumberInput input {
-        background-color: #161920 !important;
-        border: 1px solid #30333d !important;
-        color: #e0e0e0 !important;
-        border-radius: 6px !important;
-        font-family: 'Roboto Mono', monospace !important; /* Fonte de código para números */
+        background-color: #161920 !important; border: 1px solid #30333d !important; color: #e0e0e0 !important;
+        font-family: 'Roboto Mono', monospace !important;
     }
-    
-    /* Botões Tech */
     .stButton button {
-        background: linear-gradient(90deg, #00d4ff 0%, #005bea 100%);
-        color: white;
-        border: none;
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 1px;
-        transition: 0.3s;
+        background: linear-gradient(90deg, #00d4ff 0%, #005bea 100%); color: white; border: none;
+        font-weight: 600; letter-spacing: 1px;
     }
-    .stButton button:hover {
-        box-shadow: 0 0 20px rgba(0, 212, 255, 0.4);
-        transform: scale(1.02);
-    }
-
-    /* Métricas (KPIs) */
-    div[data-testid="metric-container"] {
-        background-color: #12141a;
-        border-left: 3px solid #00d4ff;
-        padding: 15px;
-        border-radius: 0 8px 8px 0;
-    }
-    label[data-testid="stMetricLabel"] {
-        font-size: 0.8rem;
-        text-transform: uppercase;
-        letter-spacing: 1px;
-        color: #888;
-    }
-    div[data-testid="stMetricValue"] {
-        font-family: 'Roboto Mono', monospace;
-        color: #fff;
-    }
+    div[data-testid="metric-container"] { background-color: #12141a; border-left: 3px solid #00d4ff; }
 </style>
 """, unsafe_allow_html=True)
 
-# --- CONFIGURAÇÃO ESTADO ---
-if 'language' not in st.session_state: st.session_state['language'] = 'PT'
+# --- CONFIGURAÇÃO ESTADO (PADRÃO PT) ---
+if 'language' not in st.session_state: 
+    st.session_state['language'] = 'PT' # Forçando PT como padrão
 
-TRANS = {
-    'PT': {'fmt': 'DD/MM/YYYY', 'dash': 'Painel de Controle', 'new': 'Nova Operação', 'imp': 'Data Link (Import)', 'wallet': 'Database View', 'cfg': 'System Config'},
-    'EN': {'fmt': 'MM/DD/YYYY', 'dash': 'Control Panel', 'new': 'New Operation', 'imp': 'Data Link (Import)', 'wallet': 'Database View', 'cfg': 'System Config'}
-}
-T = TRANS[st.session_state['language']]
+T = TRANS[st.session_state['language']] # Carrega o dicionário correto
 
 # --- BANCO DE DADOS ---
-DB_NAME = "finfuture_v4.sqlite"
+DB_NAME = "finfuture_v5.sqlite"
 
 def init_db():
     conn = sqlite3.connect(DB_NAME)
@@ -148,9 +205,8 @@ def login_user(u, p):
 def register_user(u, n, p):
     try:
         conn = sqlite3.connect(DB_NAME)
-        c = conn.cursor()
         hashed = bcrypt.hashpw(p.encode('utf-8'), bcrypt.gensalt())
-        c.execute('INSERT INTO users VALUES (?, ?, ?)', (u, n, hashed))
+        conn.execute('INSERT INTO users VALUES (?, ?, ?)', (u, n, hashed))
         conn.commit()
         conn.close()
         return True
@@ -158,9 +214,8 @@ def register_user(u, n, p):
 
 def add_transaction(owner, dt, tp, at, qt, pr):
     conn = sqlite3.connect(DB_NAME)
-    c = conn.cursor()
-    c.execute('INSERT INTO transactions (owner, date, tipo, ativo, qtd, preco, total) VALUES (?,?,?,?,?,?,?)', 
-              (owner, dt, tp, at, qt, pr, qt*pr))
+    conn.execute('INSERT INTO transactions (owner, date, tipo, ativo, qtd, preco, total) VALUES (?,?,?,?,?,?,?)', 
+                 (owner, dt, tp, at, qt, pr, qt*pr))
     conn.commit()
     conn.close()
 
@@ -170,202 +225,186 @@ def get_data(owner):
     conn.close()
     return df
 
-# --- TELA DE LOGIN (MINIMALISTA) ---
+# --- TELA DE LOGIN ---
 if 'logged_in' not in st.session_state or not st.session_state['logged_in']:
     col1, col2, col3 = st.columns([1, 1.2, 1])
     with col2:
         st.markdown("<br><br>", unsafe_allow_html=True)
-        
-        # Container Tech
         with st.container():
             st.markdown('<div class="tech-card" style="text-align: center;">', unsafe_allow_html=True)
+            st_lottie(load_lottieurl(LOTTIE_ASSETS['login']), height=100, key="anim_login")
             
-            # Animação de Login
-            lottie_login = load_lottieurl(LOTTIE_ASSETS['login'])
-            st_lottie(lottie_login, height=120, key="login_anim")
+            # SELETOR DE IDIOMA NO LOGIN
+            lang_choice = st.radio("LANGUAGE / IDIOMA", ["PT", "EN"], horizontal=True)
+            if lang_choice != st.session_state['language']:
+                st.session_state['language'] = lang_choice
+                st.rerun()
+            T = TRANS[st.session_state['language']] # Atualiza textos na hora
+
+            st.markdown(f"### {T['login_title']}")
+            st.caption(T['login_subtitle'])
             
-            st.markdown("### SYSTEM ACCESS")
-            st.caption("Secure FinFuture Environment v4.0")
-            
-            tab1, tab2 = st.tabs(["AUTHENTICATE", "INITIALIZE"])
+            tab1, tab2 = st.tabs([T['tab_auth'], T['tab_create']])
             
             with tab1:
-                u = st.text_input("ID / Username")
-                p = st.text_input("Key / Password", type="password")
-                if st.button("CONNECT", use_container_width=True):
-                    with st.spinner("Handshaking..."):
-                        time.sleep(1) # Simula conexão segura
+                u = st.text_input(T['user_ph'], key="l_user")
+                p = st.text_input(T['pass_ph'], type="password", key="l_pass")
+                if st.button(T['btn_connect'], use_container_width=True):
+                    with st.spinner(T['spin_connect']):
+                        time.sleep(1)
                         ok, name = login_user(u, p)
                         if ok:
                             st.session_state['logged_in'] = True
                             st.session_state['username'] = u
                             st.session_state['name'] = name
                             st.rerun()
-                        else:
-                            st.error("Access Denied")
+                        else: st.error(T['err_access'])
             
             with tab2:
-                nu = st.text_input("New ID")
-                nn = st.text_input("Display Name")
-                np = st.text_input("New Key", type="password")
-                if st.button("CREATE PROFILE", use_container_width=True):
-                    if register_user(nu, nn, np): st.success("Profile Created")
-                    else: st.error("ID Conflict")
-            
+                nu = st.text_input(T['user_ph'], key="r_user")
+                nn = st.text_input(T['name_ph'], key="r_name")
+                np = st.text_input(T['pass_ph'], type="password", key="r_pass")
+                if st.button(T['btn_create'], use_container_width=True):
+                    if register_user(nu, nn, np): st.success(T['success_create'])
+                    else: st.error(T['err_conflict'])
             st.markdown('</div>', unsafe_allow_html=True)
     st.stop()
 
 # ==========================================
-# SISTEMA INTERNO (DASHBOARD)
+# SISTEMA INTERNO
 # ==========================================
+T = TRANS[st.session_state['language']] # Garante que o texto interno também esteja na língua certa
 
-# --- SIDEBAR LIMPA ---
 with st.sidebar:
-    lottie_wallet = load_lottieurl(LOTTIE_ASSETS['wallet'])
-    st_lottie(lottie_wallet, height=80, key="sidebar_anim")
-    
+    st_lottie(load_lottieurl(LOTTIE_ASSETS['wallet']), height=80, key="anim_sidebar")
     st.markdown(f"<h3 style='text-align: center; font-family: Roboto Mono;'>{st.session_state['name'].upper()}</h3>", unsafe_allow_html=True)
     st.markdown("<p style='text-align: center; color: #00d4ff; font-size: 12px;'>● ONLINE</p>", unsafe_allow_html=True)
     
-    # Menu sem Emojis, usando ícones Bootstrap limpos
     selected = option_menu(
         menu_title=None,
-        options=[T['dash'], T['new'], T['imp'], T['wallet'], T['cfg']],
+        options=[T['m_dash'], T['m_new'], T['m_imp'], T['m_wallet'], T['m_cfg']],
         icons=["grid-1x2", "plus-lg", "hdd-network", "table", "sliders"],
         styles={
             "container": {"padding": "0!important", "background-color": "transparent"},
             "icon": {"color": "#00d4ff", "font-size": "14px"}, 
-            "nav-link": {"font-size": "14px", "text-align": "left", "margin":"5px", "font-family": "Inter"},
+            "nav-link": {"font-size": "14px", "margin":"5px", "font-family": "Inter"},
             "nav-link-selected": {"background-color": "rgba(0, 212, 255, 0.1)", "color": "#00d4ff", "border-left": "3px solid #00d4ff"},
         }
     )
     
     st.markdown("---")
-    if st.button("DISCONNECT"):
+    
+    # Seletor de Idioma Interno
+    new_lang = st.selectbox("🌐 IDIOMA / LANGUAGE", ["PT", "EN"], index=0 if st.session_state['language']=='PT' else 1)
+    if new_lang != st.session_state['language']:
+        st.session_state['language'] = new_lang
+        st.rerun()
+
+    if st.button(T['btn_disc']):
         st.session_state['logged_in'] = False
         st.rerun()
 
-# --- CARREGAR DADOS ---
 df = get_data(st.session_state['username'])
 
-# --- PÁGINAS ---
-
-# 1. DASHBOARD TECH
-if selected == T['dash']:
-    # Cabeçalho com Animação pequena à esquerda
+# 1. DASHBOARD
+if selected == T['m_dash']:
     c1, c2 = st.columns([1, 15])
-    with c1: 
-        st_lottie(load_lottieurl(LOTTIE_ASSETS['finance']), height=50)
-    with c2: 
-        st.title("OVERVIEW")
+    with c1: st_lottie(load_lottieurl(LOTTIE_ASSETS['finance']), height=50, key="anim_dash")
+    with c2: st.title(T['d_title'])
 
-    if df.empty:
-        st.info("No Data Stream Detected.")
+    if df.empty: st.info(T['d_no_data'])
     else:
-        # Layout de Métricas Tech
-        total = df['total'].sum()
-        
-        # Container CSS personalizado
         st.markdown('<div class="tech-card">', unsafe_allow_html=True)
-        col1, col2, col3, col4 = st.columns(4)
-        col1.metric("NET WORTH", f"R$ {total:,.2f}")
-        col2.metric("ASSETS", df['ativo'].nunique())
-        col3.metric("TRANSACTIONS", len(df))
-        # Simulação de variação em tempo real
-        col4.metric("MARKET STATUS", "OPEN", delta="Active")
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric(T['k_net'], f"R$ {df['total'].sum():,.2f}")
+        c2.metric(T['k_assets'], df['ativo'].nunique())
+        c3.metric(T['k_trans'], len(df))
+        c4.metric(T['k_market'], "OPEN", delta="Active")
         st.markdown('</div>', unsafe_allow_html=True)
         
-        # Gráficos Minimalistas
         g1, g2 = st.columns([2, 1])
         with g1:
-            st.subheader("ASSET ALLOCATION")
-            # Gráfico de Área com gradiente (Tech feel)
-            evolucao = df.groupby('date')['total'].sum().cumsum().reset_index()
-            fig = px.area(evolucao, x='date', y='total', template="plotly_dark")
+            st.subheader(T['g_evol'])
+            evol = df.groupby('date')['total'].sum().cumsum().reset_index()
+            fig = px.area(evol, x='date', y='total', template="plotly_dark")
             fig.update_traces(line_color='#00d4ff', fillcolor="rgba(0, 212, 255, 0.1)")
-            fig.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_family="Roboto Mono")
+            fig.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
             st.plotly_chart(fig, use_container_width=True)
-            
         with g2:
-            st.subheader("COMPOSITION")
+            st.subheader(T['g_alloc'])
             fig2 = px.pie(df, values='total', names='tipo', hole=0.7, template="plotly_dark", color_discrete_sequence=px.colors.sequential.Cyan)
-            fig2.update_layout(paper_bgcolor='rgba(0,0,0,0)', font_family="Roboto Mono", showlegend=False)
-            fig2.add_annotation(text="PORTFOLIO", showarrow=False, font_size=12, font_color="white")
+            fig2.update_layout(paper_bgcolor='rgba(0,0,0,0)', showlegend=False)
             st.plotly_chart(fig2, use_container_width=True)
 
 # 2. NOVA OPERAÇÃO
-elif selected == T['new']:
-    st.title("INPUT TERMINAL")
-    
+elif selected == T['m_new']:
+    st.title(T['n_title'])
     st.markdown('<div class="tech-card">', unsafe_allow_html=True)
-    with st.form("entry_form", clear_on_submit=True):
+    with st.form("entry"):
         c1, c2, c3 = st.columns(3)
-        dt = c1.date_input("DATE", date.today(), format=T['fmt'])
-        tp = c2.selectbox("TYPE", ["STOCK", "FII", "FIXED INCOME", "CRYPTO", "EXPENSE"])
-        at = c3.text_input("ASSET ID").upper()
-        
+        dt = c1.date_input(T['n_date'], date.today(), format=T['fmt'])
+        tp = c2.selectbox(T['n_type'], ["STOCK", "FII", "CDB", "CRYPTO", "EXPENSE"])
+        at = c3.text_input(T['n_asset']).upper()
         c4, c5 = st.columns(2)
-        qt = c4.number_input("QUANTITY", min_value=0.01)
-        pr = c5.number_input("UNIT PRICE", min_value=0.01)
-        
-        if st.form_submit_button("EXECUTE TRANSACTION"):
+        qt = c4.number_input(T['n_qty'], min_value=0.01)
+        pr = c5.number_input(T['n_price'], min_value=0.01)
+        if st.form_submit_button(T['btn_exec']):
             add_transaction(st.session_state['username'], dt, tp, at, qt, pr)
-            st.success("DATA UPLOADED")
+            st.success(T['success_up'])
             time.sleep(1)
             st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
 
-# 3. IMPORTAÇÃO
-elif selected == T['imp']:
-    st.title("DATA LINK (ETL)")
-    st.caption("Supported formats: .XLSX, .CSV")
-    
+# 3. IMPORTAR
+elif selected == T['m_imp']:
+    st.title(T['i_title'])
+    st.caption(T['i_desc'])
     st.markdown('<div class="tech-card">', unsafe_allow_html=True)
-    upl = st.file_uploader("DROP FILE HERE", type=['csv', 'xlsx'])
+    upl = st.file_uploader(T['i_drop'], type=['csv', 'xlsx'])
     if upl:
-        # Lógica de importação simplificada para visual
-        st.info("File buffer loaded. Ready to parse.")
-        if st.button("INITIATE SEQUENCE"):
-            with st.status("Processing...", expanded=True) as status:
-                st.write("Parsing headers...")
+        st.info("File Loaded.")
+        if st.button(T['btn_init']):
+            with st.status("Processing...", expanded=True):
+                st.write(T['st_parse'])
                 time.sleep(0.5)
-                st.write("Mapping data types...")
+                st.write(T['st_map'])
                 time.sleep(0.5)
-                st.write("Injecting into SQL...")
+                st.write(T['st_inject'])
                 time.sleep(0.5)
-                status.update(label="Complete", state="complete", expanded=False)
-            st.success("Batch Processed.")
+            st.success(T['i_complete'])
     st.markdown('</div>', unsafe_allow_html=True)
 
-# 4. CARTEIRA (GRID)
-elif selected == T['wallet']:
-    st.title("DATABASE VIEW")
-    
+# 4. CARTEIRA
+elif selected == T['m_wallet']:
+    st.title(T['w_title'])
     if not df.empty:
-        # Formata data para visualização
         df_view = df.copy()
-        if st.session_state['language'] == 'PT':
-            df_view['date'] = pd.to_datetime(df_view['date']).dt.strftime('%d/%m/%Y')
-        else:
-            df_view['date'] = pd.to_datetime(df_view['date']).dt.strftime('%m/%d/%Y')
-
+        fmt_str = '%d/%m/%Y' if st.session_state['language'] == 'PT' else '%m/%d/%Y'
+        df_view['date'] = pd.to_datetime(df_view['date']).dt.strftime(fmt_str)
+        
         gb = GridOptionsBuilder.from_dataframe(df_view[['date', 'tipo', 'ativo', 'total']])
         gb.configure_pagination()
-        # Tema Dark do AgGrid
-        gb.configure_grid_options(domLayout='autoHeight')
         gb.configure_column("total", type=["numericColumn"], valueFormatter="'R$ ' + x.toLocaleString()")
-        gridOptions = gb.build()
-        
-        # AgGrid com tema escuro (balham-dark)
-        AgGrid(df_view, gridOptions=gridOptions, theme='balham-dark', height=500, fit_columns_on_grid_load=True)
-    else:
-        st.warning("Database Empty.")
+        AgGrid(df_view, gridOptions=gb.build(), theme='balham-dark', height=500, fit_columns_on_grid_load=True)
+    else: st.warning(T['w_empty'])
 
-# 5. CONFIG
-elif selected == T['cfg']:
-    st.title("SYSTEM CONFIG")
+# 5. CONFIGURAÇÃO (BACKUP)
+elif selected == T['m_cfg']:
+    st.title(T['c_title'])
     st.markdown('<div class="tech-card">', unsafe_allow_html=True)
     st.write(f"USER HASH: `{st.session_state['username']}`")
-    st.write(f"DATABASE LATENCY: `12ms`")
-    st.write(f"SECURITY PROTOCOL: `TLS 1.3 / Bcrypt`")
+    st.write(f"SESSION ID: `{id(st.session_state)}`")
+    
+    st.markdown("---")
+    st.subheader(T['c_backup'])
+    st.caption(T['c_desc'])
+    
+    # Botão de Download do Banco de Dados
+    with open(DB_NAME, "rb") as fp:
+        btn = st.download_button(
+            label=T['btn_dl'],
+            data=fp,
+            file_name=DB_NAME,
+            mime="application/x-sqlite3"
+        )
     st.markdown('</div>', unsafe_allow_html=True)
