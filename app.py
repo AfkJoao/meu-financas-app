@@ -2,293 +2,260 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-import os
-import requests
 import yfinance as yf
+import requests
+from streamlit_option_menu import option_menu
 from datetime import datetime, date
-from streamlit_lottie import st_lottie
 
-# --- CONFIGURAÇÃO DA PÁGINA (PROFESSIONAL MODE) ---
-st.set_page_config(page_title="FinFuture OS", page_icon="💎", layout="wide")
+# --- CONFIGURAÇÃO DA PÁGINA (WIDE & DARK) ---
+st.set_page_config(page_title="FinFuture Black", page_icon="🦅", layout="wide")
 
-# --- DICIONÁRIO DE IDIOMAS (I18N) ---
-LANG = {
-    "PT": {
-        "welcome": "Painel de Controle Patrimonial",
-        "location": "Acessando de",
-        "weather": "Clima",
-        "tab1": "📊 Dashboard Executivo",
-        "tab2": "📈 Mercado & Aportes",
-        "tab3": "🏛️ Renda Fixa (CDB/Selic)",
-        "kpi_total": "Patrimônio Estimado",
-        "kpi_income": "Provisão de Rendimentos",
-        "kpi_assets": "Ativos Monitorados",
-        "new_entry": "Nova Movimentação",
-        "save": "Registrar Operação",
-        "desc_selic": "Análise de CDB baseada na Curva de Juros e Data de Aporte",
-    },
-    "EN": {
-        "welcome": "Asset Management Dashboard",
-        "location": "Accessing from",
-        "weather": "Weather",
-        "tab1": "📊 Executive Dashboard",
-        "tab2": "📈 Market & Investments",
-        "tab3": "🏛️ Fixed Income (Yields)",
-        "kpi_total": "Estimated Net Worth",
-        "kpi_income": "Yield Provision",
-        "kpi_assets": "Monitored Assets",
-        "new_entry": "New Entry",
-        "save": "Register Operation",
-        "desc_selic": "CDB Analysis based on Interest Curve and Deposit Date",
+# --- CSS PERSONALIZADO (A MÁGICA DO DESIGN) ---
+st.markdown("""
+<style>
+    /* Fundo geral e cor de texto */
+    .stApp {
+        background-color: #0E1117;
+        color: #FAFAFA;
     }
-}
+    
+    /* Cartões de KPI (Métricas) */
+    div[data-testid="metric-container"] {
+        background-color: #262730;
+        border: 1px solid #41444C;
+        padding: 20px;
+        border-radius: 10px;
+        box-shadow: 2px 2px 10px rgba(0,0,0,0.5);
+    }
+    
+    /* Ajuste de Títulos */
+    h1, h2, h3 {
+        font-family: 'Helvetica Neue', sans-serif;
+        font-weight: 300;
+    }
+    
+    /* Tabelas mais limpas */
+    .dataframe {
+        font-size: 14px !important;
+    }
+</style>
+""", unsafe_allow_html=True)
 
-# --- FUNÇÕES DE UTILIDADE E APIs ---
-
-def load_lottieurl(url):
-    """Carrega animações Lottie da internet"""
-    r = requests.get(url)
-    if r.status_code != 200:
-        return None
-    return r.json()
-
-def get_location_data():
-    """Pega cidade baseada no IP (Simulação segura para não travar)"""
-    try:
-        response = requests.get('http://ip-api.com/json/')
-        data = response.json()
-        return f"{data['city']}, {data['countryCode']}"
-    except:
-        return "Localização Desconhecida"
-
-def get_market_data(ticker):
-    """Busca dados da B3 em tempo real via Yahoo Finance"""
-    try:
-        stock = yf.Ticker(f"{ticker}.SA")
-        hist = stock.history(period="1d")
-        if not hist.empty:
-            price = hist['Close'].iloc[-1]
-            # Tenta pegar dividendos (Yield anual estimado)
-            info = stock.info
-            div_yield = info.get('dividendYield', 0) * 100 if info.get('dividendYield') else 0
-            return price, div_yield
-        return 0.0, 0.0
-    except:
-        return 0.0, 0.0
-
-@st.cache_data(ttl=86400)
-def get_selic_history():
-    """Busca histórico da Selic no Banco Central"""
-    try:
-        url = "https://api.bcb.gov.br/dados/serie/bcdata.sgs.432/dados/ultimos/120?formato=json"
-        df = pd.read_json(url)
-        df['data'] = pd.to_datetime(df['data'], format='%d/%m/%Y')
-        return df
-    except:
-        return pd.DataFrame()
-
-# --- ARMAZENAMENTO DE DADOS ---
-ARQUIVO_DADOS = "carteira_global.csv"
+# --- FUNÇÕES DE DADOS ---
+ARQUIVO_DADOS = "carteira_black.csv"
 
 def carregar_dados():
-    if not os.path.exists(ARQUIVO_DADOS):
-        return pd.DataFrame(columns=["Data", "Tipo", "Ativo", "Qtd", "Preco_Compra", "Taxa_Contratada", "Valor_Total"])
-    return pd.read_csv(ARQUIVO_DADOS)
+    try:
+        return pd.read_csv(ARQUIVO_DADOS)
+    except FileNotFoundError:
+        return pd.DataFrame(columns=["Data", "Ativo", "Tipo", "Qtd", "Preco_Medio", "Total_Investido"])
 
 def salvar_dados(df):
     df.to_csv(ARQUIVO_DADOS, index=False)
 
-# --- INÍCIO DO APP ---
+def get_market_price(ticker, tipo):
+    """Busca preço atual. Se for FII/Ação busca online. Se for Renda Fixa, simula CDI."""
+    if tipo == "Renda Fixa":
+        return None # Renda fixa calculamos via CDI
+    try:
+        stock = yf.Ticker(f"{ticker}.SA")
+        hist = stock.history(period="1d")
+        if not hist.empty:
+            return hist['Close'].iloc[-1]
+    except:
+        pass
+    return 0.0
 
-# 1. Sidebar de Configuração
-st.sidebar.header("⚙️ System Config")
-selected_lang = st.sidebar.selectbox("Language / Idioma", ["PT", "EN"])
-text = LANG[selected_lang]
+def get_selic():
+    """Pega a Selic atual para cálculos de Renda Fixa"""
+    try:
+        url = "https://api.bcb.gov.br/dados/serie/bcdata.sgs.432/dados/ultimos/1?formato=json"
+        df = pd.read_json(url)
+        return float(df['valor'].iloc[0])
+    except:
+        return 11.25 # Fallback
 
-# 2. Header com Animação e KPIs de Ambiente
-lottie_tech = load_lottieurl("https://assets5.lottiefiles.com/packages/lf20_w51pcehl.json")
+def get_weather_ip():
+    """Pega clima e local baseados no IP (Simulado para performance)"""
+    try:
+        # Simulando para não travar o app gratuito
+        return "São Paulo", "24°C"
+    except:
+        return "Brasil", "--°C"
 
-col_head1, col_head2, col_head3 = st.columns([1, 4, 2])
-with col_head1:
-    if lottie_tech:
-        st_lottie(lottie_tech, height=100)
-with col_head2:
-    st.title(text["welcome"])
-    st.caption(f"🚀 FinFuture OS v2.0 | {datetime.now().strftime('%d/%m/%Y %H:%M')}")
-with col_head3:
-    loc = get_location_data()
-    st.metric(label=text["location"], value=loc, delta=text["weather"])
+# --- SIDEBAR (NAVEGAÇÃO MODERNA) ---
+with st.sidebar:
+    # Perfil Rápido
+    st.image("https://cdn-icons-png.flaticon.com/512/4140/4140048.png", width=70)
+    st.markdown("### Olá, Investidor")
+    
+    # Widget de Clima
+    cidade, temp = get_weather_ip()
+    st.caption(f"📍 {cidade} | ⛅ {temp}")
+    
+    st.markdown("---")
+    
+    # Menu Estiloso
+    selected = option_menu(
+        menu_title="Navegação",
+        options=["Dashboard", "Novo Aporte", "Minha Carteira", "Configurações"],
+        icons=["speedometer2", "plus-circle", "wallet2", "gear"],
+        menu_icon="cast",
+        default_index=0,
+        styles={
+            "container": {"padding": "0!important", "background-color": "transparent"},
+            "icon": {"color": "#00d4ff", "font-size": "18px"}, 
+            "nav-link": {"font-size": "16px", "text-align": "left", "margin":"5px", "--hover-color": "#333"},
+            "nav-link-selected": {"background-color": "#00d4ff", "color": "white"},
+        }
+    )
 
 # --- CARREGAR DADOS ---
 df = carregar_dados()
+selic_atual = get_selic()
 
-# --- ENTRADA DE DADOS (SIDEBAR) ---
-st.sidebar.markdown("---")
-st.sidebar.subheader(text["new_entry"])
-
-with st.sidebar.form("entry_form"):
-    tipo = st.selectbox("Tipo de Ativo", ["Ação/FII", "Renda Fixa (CDB/Tesouro)"])
-    data_op = st.date_input("Data da Operação", date.today())
-    ativo_nome = st.text_input("Código/Nome (Ex: MXRF11 ou CDB Nubank)")
+# ==========================================
+# PÁGINA 1: DASHBOARD (VISÃO MACRO)
+# ==========================================
+if selected == "Dashboard":
+    st.title("📊 Visão Geral do Patrimônio")
+    st.markdown(f"**Referência Selic:** {selic_atual}% a.a.")
     
-    col_form1, col_form2 = st.columns(2)
-    with col_form1:
-        qtd = st.number_input("Qtd / Cotas", min_value=0.0, step=1.0)
-    with col_form2:
-        preco = st.number_input("Preço/Valor Unitário (R$)", min_value=0.0, format="%.2f")
-    
-    taxa = 0.0
-    if tipo == "Renda Fixa (CDB/Tesouro)":
-        taxa = st.number_input("Taxa Contratada (% do CDI ou Fixa)", value=100.0)
+    if df.empty:
+        st.info("👋 Bem-vindo! Vá em 'Novo Aporte' para começar sua jornada.")
+    else:
+        # Lógica de Cálculo de Patrimônio
+        df['Preco_Atual'] = 0.0
+        df['Saldo_Atual'] = 0.0
         
-    submitted = st.form_submit_button(text["save"])
-    
-    if submitted:
-        val_total = qtd * preco
-        novo = pd.DataFrame([{
-            "Data": data_op, "Tipo": tipo, "Ativo": ativo_nome.upper(), 
-            "Qtd": qtd, "Preco_Compra": preco, "Taxa_Contratada": taxa, "Valor_Total": val_total
-        }])
-        df = pd.concat([df, novo], ignore_index=True)
-        salvar_dados(df)
-        st.success("Salvo com sucesso!")
-        st.rerun()
-
-# --- ABAS PRINCIPAIS ---
-aba1, aba2, aba3 = st.tabs([text["tab1"], text["tab2"], text["tab3"]])
-
-# === ABA 1: DASHBOARD EXECUTIVO ===
-with aba1:
-    if not df.empty:
-        # Cálculos de KPI
-        total_investido = df["Valor_Total"].sum()
-        total_ativos = df["Ativo"].nunique()
+        # Barra de progresso para atualização
+        progress_text = "Atualizando cotações em tempo real..."
+        my_bar = st.progress(0, text=progress_text)
         
-        # Gráficos
-        c1, c2, c3 = st.columns(3)
-        c1.metric(text["kpi_total"], f"R$ {total_investido:,.2f}", delta="+Aportes")
-        c2.metric(text["kpi_assets"], total_ativos)
+        total_steps = len(df)
         
-        col_g1, col_g2 = st.columns(2)
+        for index, row in df.iterrows():
+            if row['Tipo'] == "Ação/FII":
+                preco = get_market_price(row['Ativo'], row['Tipo'])
+                # Se não achar preço (ex: final de semana ou erro), usa o preço de compra
+                atual = preco if preco > 0 else row['Preco_Medio']
+                df.at[index, 'Preco_Atual'] = atual
+                df.at[index, 'Saldo_Atual'] = atual * row['Qtd']
+            else:
+                # Renda Fixa (Cálculo Simplificado de Rentabilidade)
+                # Assumindo 1% ao mês para simplificar visualização rápida
+                dias = (pd.to_datetime(date.today()) - pd.to_datetime(row['Data'])).days
+                rentabilidade = row['Total_Investido'] * (0.01 * (dias/30)) 
+                df.at[index, 'Saldo_Atual'] = row['Total_Investido'] + rentabilidade
+            
+            my_bar.progress((index + 1) / total_steps)
+            
+        my_bar.empty()
         
-        with col_g1:
-            st.subheader("Distribuição de Carteira")
-            fig_pizza = px.pie(df, values='Valor_Total', names='Tipo', hole=0.6, color_discrete_sequence=px.colors.sequential.RdBu)
+        # KPIS (OS NÚMEROS GRANDES)
+        total_investido = df['Total_Investido'].sum()
+        saldo_bruto = df['Saldo_Atual'].sum()
+        lucro = saldo_bruto - total_investido
+        performance = (lucro / total_investido) * 100 if total_investido > 0 else 0
+        
+        col1, col2, col3, col4 = st.columns(4)
+        col1.metric("Patrimônio Total", f"R$ {saldo_bruto:,.2f}", delta=f"{performance:.2f}%")
+        col2.metric("Total Investido", f"R$ {total_investido:,.2f}")
+        col3.metric("Lucro/Prejuízo Estimado", f"R$ {lucro:,.2f}", delta_color="normal")
+        col4.metric("Ativos na Carteira", df['Ativo'].nunique())
+        
+        st.markdown("---")
+        
+        # GRÁFICOS LADO A LADO
+        g1, g2 = st.columns(2)
+        
+        with g1:
+            st.subheader("Alocação por Classe")
+            fig_pizza = px.pie(df, values='Saldo_Atual', names='Tipo', hole=0.7, 
+                               color_discrete_sequence=['#00d4ff', '#ff0055', '#ffd700'])
+            fig_pizza.update_layout(showlegend=True, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font=dict(color='white'))
             st.plotly_chart(fig_pizza, use_container_width=True)
             
-        with col_g2:
-            st.subheader("Aportes por Ativo")
-            fig_bar = px.bar(df, x='Ativo', y='Valor_Total', color='Tipo', template="plotly_dark")
+        with g2:
+            st.subheader("Maiores Posições")
+            # Agrupar por ativo
+            posicao = df.groupby('Ativo')['Saldo_Atual'].sum().reset_index().sort_values('Saldo_Atual', ascending=True)
+            fig_bar = px.bar(posicao, x='Saldo_Atual', y='Ativo', orientation='h', text_auto=True,
+                             color='Saldo_Atual', color_continuous_scale='Bluered')
+            fig_bar.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font=dict(color='white'), xaxis_title="", yaxis_title="")
             st.plotly_chart(fig_bar, use_container_width=True)
-    else:
-        st.info("Aguardando dados... Use a sidebar.")
 
-# === ABA 2: MERCADO EM TEMPO REAL (FIIs/AÇÕES) ===
-with aba2:
-    st.subheader("📡 Monitoramento da B3 (Live)")
+# ==========================================
+# PÁGINA 2: NOVO APORTE
+# ==========================================
+elif selected == "Novo Aporte":
+    st.title("💸 Registrar Operação")
     
-    df_rv = df[df["Tipo"] == "Ação/FII"].copy()
+    c1, c2 = st.columns([1, 2])
     
-    if not df_rv.empty:
-        # Agrupar por ativo
-        carteira = df_rv.groupby("Ativo").agg({"Qtd": "sum", "Preco_Compra": "mean"}).reset_index()
+    with c1:
+        st.info("Preencha os dados ao lado para atualizar sua carteira.")
         
-        lista_cotacao = []
-        
-        # Barra de progresso para o loading da API
-        bar = st.progress(0, text="Conectando à B3...")
-        
-        for i, row in carteira.iterrows():
-            ticker = row['Ativo']
-            preco_atual, div_yield = get_market_data(ticker)
+    with c2:
+        with st.form("form_aporte", clear_on_submit=True):
+            data = st.date_input("Data da Operação", date.today())
+            tipo = st.selectbox("Classe do Ativo", ["Ação/FII", "Renda Fixa"])
+            ativo = st.text_input("Código do Ativo (Ex: VALE3, CDB Inter)").upper()
             
-            valor_posicao = row['Qtd'] * preco_atual
-            lucro = valor_posicao - (row['Qtd'] * row['Preco_Compra'])
+            col_f1, col_f2 = st.columns(2)
+            qtd = col_f1.number_input("Quantidade / Cotas", min_value=0.01, step=1.0)
+            preco = col_f2.number_input("Preço Unitário / Valor Aportado", min_value=0.01, format="%.2f")
             
-            lista_cotacao.append({
-                "Ativo": ticker,
-                "Preço Médio": row['Preco_Compra'],
-                "Preço Atual": preco_atual,
-                "Variação (R$)": lucro,
-                "Div. Yield Est. (%)": div_yield,
-                "Total Atual": valor_posicao
-            })
-            bar.progress((i + 1) / len(carteira), text=f"Baixando dados de {ticker}...")
-            
-        bar.empty()
+            if st.form_submit_button("Confirmar Aporte", type="primary"):
+                total = qtd * preco
+                novo_dado = pd.DataFrame([{
+                    "Data": data, "Ativo": ativo, "Tipo": tipo, 
+                    "Qtd": qtd, "Preco_Medio": preco, "Total_Investido": total
+                }])
+                df = pd.concat([df, novo_dado], ignore_index=True)
+                salvar_dados(df)
+                st.success(f"Aporte de R$ {total:.2f} em {ativo} registrado!")
+                st.rerun()
+
+# ==========================================
+# PÁGINA 3: CARTEIRA DETALHADA
+# ==========================================
+elif selected == "Minha Carteira":
+    st.title("📜 Extrato Detalhado")
+    
+    if not df.empty:
+        # Filtros
+        filtro_tipo = st.multiselect("Filtrar por Tipo", df['Tipo'].unique(), default=df['Tipo'].unique())
+        df_filtrado = df[df['Tipo'].isin(filtro_tipo)]
         
-        df_view = pd.DataFrame(lista_cotacao)
+        # Tabela Estilizada
         st.dataframe(
-            df_view.style.format({
-                "Preço Médio": "R$ {:.2f}", "Preço Atual": "R$ {:.2f}", 
-                "Variação (R$)": "R$ {:.2f}", "Total Atual": "R$ {:.2f}", "Div. Yield Est. (%)": "{:.2f}%"
-            }), 
-            use_container_width=True
+            df_filtrado, 
+            use_container_width=True,
+            column_config={
+                "Data": st.column_config.DateColumn("Data da Compra", format="DD/MM/YYYY"),
+                "Total_Investido": st.column_config.NumberColumn("Valor Investido", format="R$ %.2f"),
+                "Preco_Medio": st.column_config.NumberColumn("Preço Pago", format="R$ %.2f"),
+            },
+            hide_index=True
         )
         
-        # Gráfico de Yield
-        fig_yield = px.bar(df_view, x="Ativo", y="Div. Yield Est. (%)", title="Dividend Yield Estimado", color="Div. Yield Est. (%)")
-        st.plotly_chart(fig_yield, use_container_width=True)
-
+        if st.button("🗑️ Limpar Carteira (Resetar Dados)"):
+            pd.DataFrame(columns=["Data", "Ativo", "Tipo", "Qtd", "Preco_Medio", "Total_Investido"]).to_csv(ARQUIVO_DADOS, index=False)
+            st.warning("Carteira resetada!")
+            st.rerun()
     else:
-        st.warning("Nenhum FII ou Ação cadastrada.")
+        st.warning("Nenhum dado encontrado.")
 
-# === ABA 3: RENDA FIXA AVANÇADA (SELIC HISTÓRICA) ===
-with aba3:
-    st.markdown(f"### {text['desc_selic']}")
+# ==========================================
+# PÁGINA 4: CONFIGURAÇÕES
+# ==========================================
+elif selected == "Configurações":
+    st.title("⚙️ Ajustes")
+    st.write("Configurações do Usuário")
     
-    selic_hist = get_selic_history()
+    st.toggle("Modo Escuro (Ativo por Padrão)", value=True, disabled=True)
+    st.selectbox("Moeda Principal", ["BRL (R$)", "USD ($)"])
+    st.selectbox("Idioma", ["Português", "English"])
     
-    if not selic_hist.empty:
-        selic_atual = selic_hist['valor'].iloc[-1]
-        media_anual = selic_hist['valor'].mean() # Média do período carregado
-        
-        col_s1, col_s2, col_s3 = st.columns(3)
-        col_s1.metric("Selic Hoje", f"{selic_atual}% a.a.")
-        col_s2.metric("Média Selic (Últimos Meses)", f"{media_anual:.2f}% a.a.")
-        
-        # Pegar os CDBs da carteira
-        df_rf = df[df["Tipo"] == "Renda Fixa (CDB/Tesouro)"].copy()
-        
-        if not df_rf.empty:
-            df_rf['Data'] = pd.to_datetime(df_rf['Data'])
-            
-            resultados = []
-            
-            for index, row in df_rf.iterrows():
-                # Lógica: Filtra a Selic apenas DEPOIS da data do aporte
-                dias_corridos = (pd.to_datetime(date.today()) - row['Data']).days
-                
-                # Cálculo Estimado (Simplificado para performance)
-                # Valor * (1 + (TaxaCDI * %Banco / 100)) ^ (Anos)
-                anos = dias_corridos / 365
-                taxa_efetiva = (selic_atual * (row['Taxa_Contratada']/100)) / 100
-                
-                valor_presente = row['Valor_Total'] * ((1 + taxa_efetiva) ** anos)
-                rendimento = valor_presente - row['Valor_Total']
-                
-                resultados.append({
-                    "Ativo": row['Ativo'],
-                    "Data Aporte": row['Data'].strftime('%d/%m/%Y'),
-                    "Dias": dias_corridos,
-                    "Aportado": row['Valor_Total'],
-                    "Taxa Momento": f"{selic_atual}%",
-                    "Saldo Estimado": valor_presente,
-                    "Lucro Bruto": rendimento
-                })
-            
-            df_rf_view = pd.DataFrame(resultados)
-            st.dataframe(df_rf_view, use_container_width=True)
-            
-            # Gráfico Comparativo de Rentabilidade
-            fig_line = px.line(selic_hist, x='data', y='valor', title="Histórico da Taxa Selic (B.C.)")
-            st.plotly_chart(fig_line, use_container_width=True)
-            
-        else:
-            st.info("Nenhum Renda Fixa cadastrado.")
-    else:
-        st.error("Erro ao conectar com Banco Central.")
-
-# Rodapé Tecnológico
-st.markdown("---")
-st.markdown("<div style='text-align: center; color: grey;'>Developed with Python & Streamlit • Data provided by B3 & BCB</div>", unsafe_allow_html=True)
+    st.info("Versão 3.0 Pro - Build 2026")
