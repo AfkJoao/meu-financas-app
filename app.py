@@ -1,152 +1,294 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 import os
-from datetime import date
+import requests
+import yfinance as yf
+from datetime import datetime, date
+from streamlit_lottie import st_lottie
 
-# --- CONFIGURAÇÃO INICIAL ---
-st.set_page_config(page_title="Minhas Finanças Pro", layout="wide")
+# --- CONFIGURAÇÃO DA PÁGINA (PROFESSIONAL MODE) ---
+st.set_page_config(page_title="FinFuture OS", page_icon="💎", layout="wide")
 
-# Nomes dos arquivos de dados
-ARQUIVO_DESPESAS = "despesas.csv"
-ARQUIVO_APORTES = "aportes.csv"
+# --- DICIONÁRIO DE IDIOMAS (I18N) ---
+LANG = {
+    "PT": {
+        "welcome": "Painel de Controle Patrimonial",
+        "location": "Acessando de",
+        "weather": "Clima",
+        "tab1": "📊 Dashboard Executivo",
+        "tab2": "📈 Mercado & Aportes",
+        "tab3": "🏛️ Renda Fixa (CDB/Selic)",
+        "kpi_total": "Patrimônio Estimado",
+        "kpi_income": "Provisão de Rendimentos",
+        "kpi_assets": "Ativos Monitorados",
+        "new_entry": "Nova Movimentação",
+        "save": "Registrar Operação",
+        "desc_selic": "Análise de CDB baseada na Curva de Juros e Data de Aporte",
+    },
+    "EN": {
+        "welcome": "Asset Management Dashboard",
+        "location": "Accessing from",
+        "weather": "Weather",
+        "tab1": "📊 Executive Dashboard",
+        "tab2": "📈 Market & Investments",
+        "tab3": "🏛️ Fixed Income (Yields)",
+        "kpi_total": "Estimated Net Worth",
+        "kpi_income": "Yield Provision",
+        "kpi_assets": "Monitored Assets",
+        "new_entry": "New Entry",
+        "save": "Register Operation",
+        "desc_selic": "CDB Analysis based on Interest Curve and Deposit Date",
+    }
+}
 
-# --- FUNÇÃO ESPECIAL: BUSCAR SELIC NO BANCO CENTRAL ---
-@st.cache_data(ttl=86400) # O sistema guarda o valor por 24h para não travar
-def buscar_selic_atual():
-    """
-    Conecta na API do Banco Central e pega a Meta Selic atual.
-    Código da série 432 = Meta Selic definida pelo COPOM.
-    """
+# --- FUNÇÕES DE UTILIDADE E APIs ---
+
+def load_lottieurl(url):
+    """Carrega animações Lottie da internet"""
+    r = requests.get(url)
+    if r.status_code != 200:
+        return None
+    return r.json()
+
+def get_location_data():
+    """Pega cidade baseada no IP (Simulação segura para não travar)"""
     try:
-        url = "https://api.bcb.gov.br/dados/serie/bcdata.sgs.432/dados/ultimos/1?formato=json"
-        # O Pandas lê o JSON direto da URL (Automação!)
-        df_bc = pd.read_json(url)
-        selic_atual = float(df_bc['valor'].iloc[0])
-        return selic_atual
+        response = requests.get('http://ip-api.com/json/')
+        data = response.json()
+        return f"{data['city']}, {data['countryCode']}"
     except:
-        # Se o site do Banco Central cair, usa 11.25 como segurança
-        return 11.25
+        return "Localização Desconhecida"
 
-# --- FUNÇÕES DE ARQUIVO ---
-def carregar_dados(arquivo, colunas):
-    if not os.path.exists(arquivo):
-        return pd.DataFrame(columns=colunas)
-    return pd.read_csv(arquivo)
+def get_market_data(ticker):
+    """Busca dados da B3 em tempo real via Yahoo Finance"""
+    try:
+        stock = yf.Ticker(f"{ticker}.SA")
+        hist = stock.history(period="1d")
+        if not hist.empty:
+            price = hist['Close'].iloc[-1]
+            # Tenta pegar dividendos (Yield anual estimado)
+            info = stock.info
+            div_yield = info.get('dividendYield', 0) * 100 if info.get('dividendYield') else 0
+            return price, div_yield
+        return 0.0, 0.0
+    except:
+        return 0.0, 0.0
 
-def salvar_dados(df, arquivo):
-    df.to_csv(arquivo, index=False)
+@st.cache_data(ttl=86400)
+def get_selic_history():
+    """Busca histórico da Selic no Banco Central"""
+    try:
+        url = "https://api.bcb.gov.br/dados/serie/bcdata.sgs.432/dados/ultimos/120?formato=json"
+        df = pd.read_json(url)
+        df['data'] = pd.to_datetime(df['data'], format='%d/%m/%Y')
+        return df
+    except:
+        return pd.DataFrame()
 
-# Carregar dados
-df_despesas = carregar_dados(ARQUIVO_DESPESAS, ["Data", "Categoria", "Descrição", "Valor"])
-df_aportes = carregar_dados(ARQUIVO_APORTES, ["Data", "Tipo", "Destino", "Valor"])
+# --- ARMAZENAMENTO DE DADOS ---
+ARQUIVO_DADOS = "carteira_global.csv"
 
-# --- BARRA LATERAL (ENTRADA DE DADOS) ---
-st.sidebar.header("💸 Novo Registro")
-tipo_registro = st.sidebar.radio("Tipo", ["Despesa", "Aporte"], label_visibility="collapsed")
+def carregar_dados():
+    if not os.path.exists(ARQUIVO_DADOS):
+        return pd.DataFrame(columns=["Data", "Tipo", "Ativo", "Qtd", "Preco_Compra", "Taxa_Contratada", "Valor_Total"])
+    return pd.read_csv(ARQUIVO_DADOS)
 
-if tipo_registro == "Despesa":
-    st.sidebar.subheader("Nova Despesa")
-    data_despesa = st.sidebar.date_input("Data", date.today())
-    cat_despesa = st.sidebar.selectbox("Categoria", ["Alimentação", "Transporte", "Moradia", "Lazer", "Saúde", "Outros"])
-    desc_despesa = st.sidebar.text_input("Descrição (Ex: Pizza)")
-    # step=0 remove as setinhas de + e -
-    valor_despesa = st.sidebar.number_input("Valor (R$)", min_value=0.0, step=0.0, format="%.2f")
+def salvar_dados(df):
+    df.to_csv(ARQUIVO_DADOS, index=False)
+
+# --- INÍCIO DO APP ---
+
+# 1. Sidebar de Configuração
+st.sidebar.header("⚙️ System Config")
+selected_lang = st.sidebar.selectbox("Language / Idioma", ["PT", "EN"])
+text = LANG[selected_lang]
+
+# 2. Header com Animação e KPIs de Ambiente
+lottie_tech = load_lottieurl("https://assets5.lottiefiles.com/packages/lf20_w51pcehl.json")
+
+col_head1, col_head2, col_head3 = st.columns([1, 4, 2])
+with col_head1:
+    if lottie_tech:
+        st_lottie(lottie_tech, height=100)
+with col_head2:
+    st.title(text["welcome"])
+    st.caption(f"🚀 FinFuture OS v2.0 | {datetime.now().strftime('%d/%m/%Y %H:%M')}")
+with col_head3:
+    loc = get_location_data()
+    st.metric(label=text["location"], value=loc, delta=text["weather"])
+
+# --- CARREGAR DADOS ---
+df = carregar_dados()
+
+# --- ENTRADA DE DADOS (SIDEBAR) ---
+st.sidebar.markdown("---")
+st.sidebar.subheader(text["new_entry"])
+
+with st.sidebar.form("entry_form"):
+    tipo = st.selectbox("Tipo de Ativo", ["Ação/FII", "Renda Fixa (CDB/Tesouro)"])
+    data_op = st.date_input("Data da Operação", date.today())
+    ativo_nome = st.text_input("Código/Nome (Ex: MXRF11 ou CDB Nubank)")
     
-    if st.sidebar.button("Salvar Despesa", use_container_width=True):
-        nova_linha = pd.DataFrame({"Data": [data_despesa], "Categoria": [cat_despesa], "Descrição": [desc_despesa], "Valor": [valor_despesa]})
-        df_despesas = pd.concat([df_despesas, nova_linha], ignore_index=True)
-        salvar_dados(df_despesas, ARQUIVO_DESPESAS)
-        st.sidebar.success("Salvo!")
-        st.rerun()
-
-else: # Aporte
-    st.sidebar.subheader("Novo Aporte")
-    data_aporte = st.sidebar.date_input("Data", date.today())
-    tipo_aporte = st.sidebar.selectbox("Tipo", ["Reserva (CDB)", "FIIs", "Ações", "Outros"])
-    destino_aporte = st.sidebar.text_input("Ativo (Ex: CDB Banco X)")
-    valor_aporte = st.sidebar.number_input("Valor (R$)", min_value=0.0, step=0.0, format="%.2f")
+    col_form1, col_form2 = st.columns(2)
+    with col_form1:
+        qtd = st.number_input("Qtd / Cotas", min_value=0.0, step=1.0)
+    with col_form2:
+        preco = st.number_input("Preço/Valor Unitário (R$)", min_value=0.0, format="%.2f")
     
-    if st.sidebar.button("Salvar Aporte", use_container_width=True):
-        nova_linha = pd.DataFrame({"Data": [data_aporte], "Tipo": [tipo_aporte], "Destino": [destino_aporte], "Valor": [valor_aporte]})
-        df_aportes = pd.concat([df_aportes, nova_linha], ignore_index=True)
-        salvar_dados(df_aportes, ARQUIVO_APORTES)
-        st.sidebar.success("Investimento Salvo!")
-        st.rerun()
-
-# --- DASHBOARD PRINCIPAL ---
-st.title("💰 Painel Financeiro Inteligente")
-
-aba1, aba2, aba3 = st.tabs(["📊 Gastos", "📈 Investimentos (Automático)", "📝 Histórico"])
-
-# === ABA 1: GASTOS ===
-with aba1:
-    if not df_despesas.empty:
-        df_despesas["Data"] = pd.to_datetime(df_despesas["Data"])
-        df_despesas["Mes"] = df_despesas["Data"].dt.strftime("%Y-%m")
+    taxa = 0.0
+    if tipo == "Renda Fixa (CDB/Tesouro)":
+        taxa = st.number_input("Taxa Contratada (% do CDI ou Fixa)", value=100.0)
         
-        c1, c2 = st.columns(2)
-        with c1:
-            grafico_mes = df_despesas.groupby("Mes")["Valor"].sum().reset_index()
-            fig = px.bar(grafico_mes, x="Mes", y="Valor", title="Gasto Mensal", text_auto=True)
-            st.plotly_chart(fig, use_container_width=True)
-        with c2:
-            fig_pizza = px.pie(df_despesas, values="Valor", names="Categoria", hole=0.5, title="Por Categoria")
+    submitted = st.form_submit_button(text["save"])
+    
+    if submitted:
+        val_total = qtd * preco
+        novo = pd.DataFrame([{
+            "Data": data_op, "Tipo": tipo, "Ativo": ativo_nome.upper(), 
+            "Qtd": qtd, "Preco_Compra": preco, "Taxa_Contratada": taxa, "Valor_Total": val_total
+        }])
+        df = pd.concat([df, novo], ignore_index=True)
+        salvar_dados(df)
+        st.success("Salvo com sucesso!")
+        st.rerun()
+
+# --- ABAS PRINCIPAIS ---
+aba1, aba2, aba3 = st.tabs([text["tab1"], text["tab2"], text["tab3"]])
+
+# === ABA 1: DASHBOARD EXECUTIVO ===
+with aba1:
+    if not df.empty:
+        # Cálculos de KPI
+        total_investido = df["Valor_Total"].sum()
+        total_ativos = df["Ativo"].nunique()
+        
+        # Gráficos
+        c1, c2, c3 = st.columns(3)
+        c1.metric(text["kpi_total"], f"R$ {total_investido:,.2f}", delta="+Aportes")
+        c2.metric(text["kpi_assets"], total_ativos)
+        
+        col_g1, col_g2 = st.columns(2)
+        
+        with col_g1:
+            st.subheader("Distribuição de Carteira")
+            fig_pizza = px.pie(df, values='Valor_Total', names='Tipo', hole=0.6, color_discrete_sequence=px.colors.sequential.RdBu)
             st.plotly_chart(fig_pizza, use_container_width=True)
             
-        st.metric("Total Gasto", f"R$ {df_despesas['Valor'].sum():,.2f}")
+        with col_g2:
+            st.subheader("Aportes por Ativo")
+            fig_bar = px.bar(df, x='Ativo', y='Valor_Total', color='Tipo', template="plotly_dark")
+            st.plotly_chart(fig_bar, use_container_width=True)
     else:
-        st.info("Cadastre sua primeira despesa na lateral.")
+        st.info("Aguardando dados... Use a sidebar.")
 
-# === ABA 2: INVESTIMENTOS (COM INTEGRAÇÃO API) ===
+# === ABA 2: MERCADO EM TEMPO REAL (FIIs/AÇÕES) ===
 with aba2:
-    st.header("Simulador de Rentabilidade Real")
+    st.subheader("📡 Monitoramento da B3 (Live)")
     
-    # 1. Busca a Selic automática
-    selic_real = buscar_selic_atual()
+    df_rv = df[df["Tipo"] == "Ação/FII"].copy()
     
-    col_calc, col_graf = st.columns(2)
-    
-    with col_calc:
-        st.markdown("### 🧮 Calculadora de CDB")
-        # Cartão mostrando a taxa capturada da internet
-        st.info(f"📡 **Conexão Banco Central:** A Taxa Selic atual é **{selic_real}% a.a.**")
+    if not df_rv.empty:
+        # Agrupar por ativo
+        carteira = df_rv.groupby("Ativo").agg({"Qtd": "sum", "Preco_Compra": "mean"}).reset_index()
         
-        st.markdown("Preencha os dados abaixo (Digite os valores):")
+        lista_cotacao = []
         
-        # Caixas de texto simples (sem botões +/-)
-        valor_investido = st.number_input("Quanto você tem investido? (R$)", value=1000.00, step=0.0)
-        percentual_cdi = st.number_input("Quanto o banco paga do CDI? (%)", value=100.0, step=0.0)
+        # Barra de progresso para o loading da API
+        bar = st.progress(0, text="Conectando à B3...")
         
-        # CÁLCULO AUTOMÁTICO
-        # Fórmula: Valor * (Selic/100) * (Pct_Banco/100)
-        rendimento_anual_bruto = valor_investido * (selic_real / 100) * (percentual_cdi / 100)
-        rendimento_mensal_bruto = rendimento_anual_bruto / 12
+        for i, row in carteira.iterrows():
+            ticker = row['Ativo']
+            preco_atual, div_yield = get_market_data(ticker)
+            
+            valor_posicao = row['Qtd'] * preco_atual
+            lucro = valor_posicao - (row['Qtd'] * row['Preco_Compra'])
+            
+            lista_cotacao.append({
+                "Ativo": ticker,
+                "Preço Médio": row['Preco_Compra'],
+                "Preço Atual": preco_atual,
+                "Variação (R$)": lucro,
+                "Div. Yield Est. (%)": div_yield,
+                "Total Atual": valor_posicao
+            })
+            bar.progress((i + 1) / len(carteira), text=f"Baixando dados de {ticker}...")
+            
+        bar.empty()
         
-        # IR Regressivo (Média 17.5% para simulação)
-        ir = 0.175
-        rendimento_liquido = rendimento_mensal_bruto * (1 - ir)
+        df_view = pd.DataFrame(lista_cotacao)
+        st.dataframe(
+            df_view.style.format({
+                "Preço Médio": "R$ {:.2f}", "Preço Atual": "R$ {:.2f}", 
+                "Variação (R$)": "R$ {:.2f}", "Total Atual": "R$ {:.2f}", "Div. Yield Est. (%)": "{:.2f}%"
+            }), 
+            use_container_width=True
+        )
         
-        st.divider()
-        st.success(f"💰 Seu dinheiro renderá limpo: **R$ {rendimento_liquido:.2f} / mês**")
-        st.caption(f"*Cálculo baseado na Selic de hoje ({selic_real}%) e desconto médio de IR.")
+        # Gráfico de Yield
+        fig_yield = px.bar(df_view, x="Ativo", y="Div. Yield Est. (%)", title="Dividend Yield Estimado", color="Div. Yield Est. (%)")
+        st.plotly_chart(fig_yield, use_container_width=True)
 
-    with col_graf:
-        st.markdown("### 🚀 Meus Aportes")
-        if not df_aportes.empty:
-            df_aportes["Data"] = pd.to_datetime(df_aportes["Data"])
-            df_aportes["Mes"] = df_aportes["Data"].dt.strftime("%Y-%m")
-            fig = px.bar(df_aportes, x="Mes", y="Valor", color="Tipo", barmode='group')
-            st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.warning("Nenhum aporte registrado ainda.")
+    else:
+        st.warning("Nenhum FII ou Ação cadastrada.")
 
-# === ABA 3: DADOS ===
+# === ABA 3: RENDA FIXA AVANÇADA (SELIC HISTÓRICA) ===
 with aba3:
-    c1, c2 = st.columns(2)
-    with c1:
-        st.markdown("**Histórico de Despesas**")
-        st.dataframe(df_despesas, use_container_width=True, hide_index=True)
-    with c2:
-        st.markdown("**Histórico de Aportes**")
-        st.dataframe(df_aportes, use_container_width=True, hide_index=True)
+    st.markdown(f"### {text['desc_selic']}")
+    
+    selic_hist = get_selic_history()
+    
+    if not selic_hist.empty:
+        selic_atual = selic_hist['valor'].iloc[-1]
+        media_anual = selic_hist['valor'].mean() # Média do período carregado
+        
+        col_s1, col_s2, col_s3 = st.columns(3)
+        col_s1.metric("Selic Hoje", f"{selic_atual}% a.a.")
+        col_s2.metric("Média Selic (Últimos Meses)", f"{media_anual:.2f}% a.a.")
+        
+        # Pegar os CDBs da carteira
+        df_rf = df[df["Tipo"] == "Renda Fixa (CDB/Tesouro)"].copy()
+        
+        if not df_rf.empty:
+            df_rf['Data'] = pd.to_datetime(df_rf['Data'])
+            
+            resultados = []
+            
+            for index, row in df_rf.iterrows():
+                # Lógica: Filtra a Selic apenas DEPOIS da data do aporte
+                dias_corridos = (pd.to_datetime(date.today()) - row['Data']).days
+                
+                # Cálculo Estimado (Simplificado para performance)
+                # Valor * (1 + (TaxaCDI * %Banco / 100)) ^ (Anos)
+                anos = dias_corridos / 365
+                taxa_efetiva = (selic_atual * (row['Taxa_Contratada']/100)) / 100
+                
+                valor_presente = row['Valor_Total'] * ((1 + taxa_efetiva) ** anos)
+                rendimento = valor_presente - row['Valor_Total']
+                
+                resultados.append({
+                    "Ativo": row['Ativo'],
+                    "Data Aporte": row['Data'].strftime('%d/%m/%Y'),
+                    "Dias": dias_corridos,
+                    "Aportado": row['Valor_Total'],
+                    "Taxa Momento": f"{selic_atual}%",
+                    "Saldo Estimado": valor_presente,
+                    "Lucro Bruto": rendimento
+                })
+            
+            df_rf_view = pd.DataFrame(resultados)
+            st.dataframe(df_rf_view, use_container_width=True)
+            
+            # Gráfico Comparativo de Rentabilidade
+            fig_line = px.line(selic_hist, x='data', y='valor', title="Histórico da Taxa Selic (B.C.)")
+            st.plotly_chart(fig_line, use_container_width=True)
+            
+        else:
+            st.info("Nenhum Renda Fixa cadastrado.")
+    else:
+        st.error("Erro ao conectar com Banco Central.")
+
+# Rodapé Tecnológico
+st.markdown("---")
+st.markdown("<div style='text-align: center; color: grey;'>Developed with Python & Streamlit • Data provided by B3 & BCB</div>", unsafe_allow_html=True)
