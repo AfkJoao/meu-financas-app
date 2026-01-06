@@ -14,11 +14,74 @@ from streamlit_lottie import st_lottie
 # --- CONFIGURAÇÃO DA PÁGINA ---
 st.set_page_config(page_title="FinFuture OS", page_icon="💠", layout="wide")
 
-# --- DICIONÁRIO DE TRADUÇÃO COMPLETO (PT/EN) ---
+# --- ASSETS DE ANIMAÇÃO (LOTTIE) ---
+# Links corrigidos e estáveis para garantir que apareçam
+LOTTIE_ASSETS = {
+    "finance": "https://lottie.host/5a704719-d04b-487e-b6a3-67c4d57c24a6/7q6v5F6uys.json", # Gráfico Tech
+    "login": "https://lottie.host/9339b618-62f9-4670-9831-2996d934271d/1z0s6l3v2G.json",    # Cadeado Tech
+    "wallet": "https://lottie.host/808b8f2d-d558-4721-a719-798eb4f9401b/M52f20z9pJ.json"    # Carteira Digital
+}
+
+def load_lottieurl(url):
+    try:
+        r = requests.get(url)
+        if r.status_code != 200:
+            return None
+        return r.json()
+    except:
+        return None
+
+# --- CSS TECH-MINIMALISTA ---
+st.markdown("""
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&family=Roboto+Mono:wght@400;700&display=swap');
+    
+    html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
+    
+    .stApp { 
+        background-color: #0E1117; 
+        background-image: radial-gradient(circle at 50% 0%, rgba(0, 212, 255, 0.05) 0%, transparent 50%); 
+    }
+    
+    .tech-card {
+        background: rgba(255, 255, 255, 0.03); 
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 12px; 
+        padding: 20px; 
+        backdrop-filter: blur(10px); 
+        margin-bottom: 20px;
+    }
+    
+    .stTextInput input, .stSelectbox div[data-baseweb="select"], .stDateInput input, .stNumberInput input {
+        background-color: #161920 !important; 
+        border: 1px solid #30333d !important; 
+        color: #e0e0e0 !important;
+        font-family: 'Roboto Mono', monospace !important;
+    }
+    
+    .stButton button {
+        background: linear-gradient(90deg, #00d4ff 0%, #005bea 100%); 
+        color: white; 
+        border: none;
+        font-weight: 600; 
+        letter-spacing: 1px;
+    }
+    
+    div[data-testid="metric-container"] { 
+        background-color: #12141a; 
+        border-left: 3px solid #00d4ff; 
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# --- CONFIGURAÇÃO ESTADO (PADRÃO PT) ---
+if 'language' not in st.session_state: 
+    st.session_state['language'] = 'PT'
+
+# --- DICIONÁRIO DE TRADUÇÃO ---
 TRANS = {
     'PT': {
         'fmt': 'DD/MM/YYYY',
-        # Login
         'login_title': 'ACESSO AO SISTEMA',
         'login_subtitle': 'Ambiente Seguro FinFuture v5.0',
         'tab_auth': 'AUTENTICAR',
@@ -32,14 +95,12 @@ TRANS = {
         'err_access': 'Acesso Negado: Credenciais Inválidas',
         'success_create': 'Perfil Criado com Sucesso',
         'err_conflict': 'ID de Usuário já existe',
-        # Menu
         'm_dash': 'Painel Geral',
         'm_new': 'Nova Operação',
         'm_imp': 'Importar Dados (ETL)',
         'm_wallet': 'Banco de Dados',
         'm_cfg': 'Configurações',
         'btn_disc': 'DESCONECTAR',
-        # Dashboard
         'd_title': 'VISÃO GERAL',
         'd_no_data': 'Nenhum fluxo de dados detectado.',
         'k_net': 'PATRIMÔNIO',
@@ -48,7 +109,6 @@ TRANS = {
         'k_market': 'STATUS MERCADO',
         'g_alloc': 'ALOCAÇÃO DE ATIVOS',
         'g_evol': 'EVOLUÇÃO PATRIMONIAL',
-        # Nova Operação
         'n_title': 'TERMINAL DE ENTRADA',
         'n_date': 'DATA',
         'n_type': 'TIPO',
@@ -57,7 +117,6 @@ TRANS = {
         'n_price': 'PREÇO UNITÁRIO',
         'btn_exec': 'EXECUTAR TRANSAÇÃO',
         'success_up': 'DADOS ENVIADOS',
-        # Importar
         'i_title': 'LINK DE DADOS (ETL)',
         'i_desc': 'Formatos suportados: .XLSX, .CSV',
         'i_drop': 'ARRASTE O ARQUIVO AQUI',
@@ -66,10 +125,8 @@ TRANS = {
         'st_map': 'Mapeando tipos...',
         'st_inject': 'Injetando no SQL...',
         'i_complete': 'Lote Processado.',
-        # Carteira
         'w_title': 'VISUALIZADOR DE DADOS',
         'w_empty': 'Banco de Dados Vazio.',
-        # Config
         'c_title': 'CONFIGURAÇÃO DO SISTEMA',
         'c_backup': 'BACKUP DE DADOS (SQLITE)',
         'c_desc': 'Baixe seu banco de dados para não perder informações se o servidor reiniciar.',
@@ -77,7 +134,6 @@ TRANS = {
     },
     'EN': {
         'fmt': 'MM/DD/YYYY',
-        # Login
         'login_title': 'SYSTEM ACCESS',
         'login_subtitle': 'Secure FinFuture Environment v5.0',
         'tab_auth': 'AUTHENTICATE',
@@ -91,14 +147,12 @@ TRANS = {
         'err_access': 'Access Denied',
         'success_create': 'Profile Created',
         'err_conflict': 'ID Conflict',
-        # Menu
         'm_dash': 'Overview',
         'm_new': 'New Operation',
         'm_imp': 'Data Link (Import)',
         'm_wallet': 'Database View',
         'm_cfg': 'System Config',
         'btn_disc': 'DISCONNECT',
-        # Dashboard
         'd_title': 'OVERVIEW',
         'd_no_data': 'No Data Stream Detected.',
         'k_net': 'NET WORTH',
@@ -107,7 +161,6 @@ TRANS = {
         'k_market': 'MARKET STATUS',
         'g_alloc': 'ASSET ALLOCATION',
         'g_evol': 'WEALTH EVOLUTION',
-        # New Operation
         'n_title': 'INPUT TERMINAL',
         'n_date': 'DATE',
         'n_type': 'TYPE',
@@ -116,7 +169,6 @@ TRANS = {
         'n_price': 'UNIT PRICE',
         'btn_exec': 'EXECUTE TRANSACTION',
         'success_up': 'DATA UPLOADED',
-        # Import
         'i_title': 'DATA LINK (ETL)',
         'i_desc': 'Supported formats: .XLSX, .CSV',
         'i_drop': 'DROP FILE HERE',
@@ -125,10 +177,8 @@ TRANS = {
         'st_map': 'Mapping data types...',
         'st_inject': 'Injecting into SQL...',
         'i_complete': 'Batch Processed.',
-        # Wallet
         'w_title': 'DATABASE VIEW',
         'w_empty': 'Database Empty.',
-        # Config
         'c_title': 'SYSTEM CONFIG',
         'c_backup': 'DATA BACKUP (SQLITE)',
         'c_desc': 'Download your database to prevent data loss on server restart.',
@@ -136,46 +186,7 @@ TRANS = {
     }
 }
 
-# --- ASSETS (LOTTIE) ---
-LOTTIE_ASSETS = {
-    "finance": "https://assets10.lottiefiles.com/packages/lf20_w51pcehl.json",
-    "login": "https://assets9.lottiefiles.com/packages/lf20_h9kds1my.json",
-    "wallet": "https://assets3.lottiefiles.com/packages/lf20_yzoqyyqf.json"
-}
-
-def load_lottieurl(url):
-    try:
-        r = requests.get(url)
-        return r.json() if r.status_code == 200 else None
-    except: return None
-
-# --- CSS TECH-MINIMALISTA ---
-st.markdown("""
-<style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&family=Roboto+Mono:wght@400;700&display=swap');
-    html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
-    .stApp { background-color: #0E1117; background-image: radial-gradient(circle at 50% 0%, rgba(0, 212, 255, 0.05) 0%, transparent 50%); }
-    .tech-card {
-        background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08);
-        border-radius: 12px; padding: 20px; backdrop-filter: blur(10px); margin-bottom: 20px;
-    }
-    .stTextInput input, .stSelectbox div[data-baseweb="select"], .stDateInput input, .stNumberInput input {
-        background-color: #161920 !important; border: 1px solid #30333d !important; color: #e0e0e0 !important;
-        font-family: 'Roboto Mono', monospace !important;
-    }
-    .stButton button {
-        background: linear-gradient(90deg, #00d4ff 0%, #005bea 100%); color: white; border: none;
-        font-weight: 600; letter-spacing: 1px;
-    }
-    div[data-testid="metric-container"] { background-color: #12141a; border-left: 3px solid #00d4ff; }
-</style>
-""", unsafe_allow_html=True)
-
-# --- CONFIGURAÇÃO ESTADO (PADRÃO PT) ---
-if 'language' not in st.session_state: 
-    st.session_state['language'] = 'PT' # Forçando PT como padrão
-
-T = TRANS[st.session_state['language']] # Carrega o dicionário correto
+T = TRANS[st.session_state['language']] 
 
 # --- BANCO DE DADOS ---
 DB_NAME = "finfuture_v5.sqlite"
@@ -232,6 +243,8 @@ if 'logged_in' not in st.session_state or not st.session_state['logged_in']:
         st.markdown("<br><br>", unsafe_allow_html=True)
         with st.container():
             st.markdown('<div class="tech-card" style="text-align: center;">', unsafe_allow_html=True)
+            
+            # ANIMAÇÃO: Cadeado Tech
             st_lottie(load_lottieurl(LOTTIE_ASSETS['login']), height=100, key="anim_login")
             
             # SELETOR DE IDIOMA NO LOGIN
@@ -239,7 +252,7 @@ if 'logged_in' not in st.session_state or not st.session_state['logged_in']:
             if lang_choice != st.session_state['language']:
                 st.session_state['language'] = lang_choice
                 st.rerun()
-            T = TRANS[st.session_state['language']] # Atualiza textos na hora
+            T = TRANS[st.session_state['language']] 
 
             st.markdown(f"### {T['login_title']}")
             st.caption(T['login_subtitle'])
@@ -273,7 +286,7 @@ if 'logged_in' not in st.session_state or not st.session_state['logged_in']:
 # ==========================================
 # SISTEMA INTERNO
 # ==========================================
-T = TRANS[st.session_state['language']] # Garante que o texto interno também esteja na língua certa
+T = TRANS[st.session_state['language']]
 
 with st.sidebar:
     st_lottie(load_lottieurl(LOTTIE_ASSETS['wallet']), height=80, key="anim_sidebar")
@@ -293,8 +306,6 @@ with st.sidebar:
     )
     
     st.markdown("---")
-    
-    # Seletor de Idioma Interno
     new_lang = st.selectbox("🌐 IDIOMA / LANGUAGE", ["PT", "EN"], index=0 if st.session_state['language']=='PT' else 1)
     if new_lang != st.session_state['language']:
         st.session_state['language'] = new_lang
@@ -399,7 +410,6 @@ elif selected == T['m_cfg']:
     st.subheader(T['c_backup'])
     st.caption(T['c_desc'])
     
-    # Botão de Download do Banco de Dados
     with open(DB_NAME, "rb") as fp:
         btn = st.download_button(
             label=T['btn_dl'],
