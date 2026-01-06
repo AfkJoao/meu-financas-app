@@ -15,21 +15,31 @@ from streamlit_lottie import st_lottie
 st.set_page_config(page_title="FinFuture OS", page_icon="💠", layout="wide")
 
 # --- ASSETS DE ANIMAÇÃO (LOTTIE) ---
-# Links corrigidos e estáveis para garantir que apareçam
+# Usando links oficiais do LottieFiles (mais estáveis)
 LOTTIE_ASSETS = {
-    "finance": "https://lottie.host/5a704719-d04b-487e-b6a3-67c4d57c24a6/7q6v5F6uys.json", # Gráfico Tech
-    "login": "https://lottie.host/9339b618-62f9-4670-9831-2996d934271d/1z0s6l3v2G.json",    # Cadeado Tech
-    "wallet": "https://lottie.host/808b8f2d-d558-4721-a719-798eb4f9401b/M52f20z9pJ.json"    # Carteira Digital
+    "finance": "https://assets10.lottiefiles.com/packages/lf20_w51pcehl.json",
+    "login": "https://assets9.lottiefiles.com/packages/lf20_h9kds1my.json",
+    "wallet": "https://assets3.lottiefiles.com/packages/lf20_yzoqyyqf.json"
 }
 
 def load_lottieurl(url):
+    """Tenta carregar a animação. Se falhar, retorna None sem quebrar o app."""
     try:
-        r = requests.get(url)
+        r = requests.get(url, timeout=3) # Timeout de 3s para não travar
         if r.status_code != 200:
             return None
         return r.json()
     except:
         return None
+
+# Função segura para exibir Lottie
+def safe_lottie(key_asset, height, key_unique):
+    anim_data = load_lottieurl(LOTTIE_ASSETS[key_asset])
+    if anim_data:
+        st_lottie(anim_data, height=height, key=key_unique)
+    else:
+        # Fallback: Se a animação falhar, mostra um emoji ou espaço vazio
+        st.markdown(f"<div style='height:{height}px; display:flex; align-items:center; justify-content:center; font-size:40px;'>💠</div>", unsafe_allow_html=True)
 
 # --- CSS TECH-MINIMALISTA ---
 st.markdown("""
@@ -74,16 +84,15 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- CONFIGURAÇÃO ESTADO (PADRÃO PT) ---
+# --- CONFIGURAÇÃO ESTADO ---
 if 'language' not in st.session_state: 
     st.session_state['language'] = 'PT'
 
-# --- DICIONÁRIO DE TRADUÇÃO ---
 TRANS = {
     'PT': {
         'fmt': 'DD/MM/YYYY',
         'login_title': 'ACESSO AO SISTEMA',
-        'login_subtitle': 'Ambiente Seguro FinFuture v5.0',
+        'login_subtitle': 'Ambiente Seguro FinFuture v5.1',
         'tab_auth': 'AUTENTICAR',
         'tab_create': 'CRIAR CONTA',
         'user_ph': 'ID / Usuário',
@@ -135,7 +144,7 @@ TRANS = {
     'EN': {
         'fmt': 'MM/DD/YYYY',
         'login_title': 'SYSTEM ACCESS',
-        'login_subtitle': 'Secure FinFuture Environment v5.0',
+        'login_subtitle': 'Secure FinFuture Environment v5.1',
         'tab_auth': 'AUTHENTICATE',
         'tab_create': 'INITIALIZE',
         'user_ph': 'ID / Username',
@@ -244,10 +253,9 @@ if 'logged_in' not in st.session_state or not st.session_state['logged_in']:
         with st.container():
             st.markdown('<div class="tech-card" style="text-align: center;">', unsafe_allow_html=True)
             
-            # ANIMAÇÃO: Cadeado Tech
-            st_lottie(load_lottieurl(LOTTIE_ASSETS['login']), height=100, key="anim_login")
+            # ANIMAÇÃO SEGURA (Não quebra se falhar)
+            safe_lottie("login", 100, "anim_login")
             
-            # SELETOR DE IDIOMA NO LOGIN
             lang_choice = st.radio("LANGUAGE / IDIOMA", ["PT", "EN"], horizontal=True)
             if lang_choice != st.session_state['language']:
                 st.session_state['language'] = lang_choice
@@ -289,7 +297,8 @@ if 'logged_in' not in st.session_state or not st.session_state['logged_in']:
 T = TRANS[st.session_state['language']]
 
 with st.sidebar:
-    st_lottie(load_lottieurl(LOTTIE_ASSETS['wallet']), height=80, key="anim_sidebar")
+    safe_lottie("wallet", 80, "anim_sidebar")
+    
     st.markdown(f"<h3 style='text-align: center; font-family: Roboto Mono;'>{st.session_state['name'].upper()}</h3>", unsafe_allow_html=True)
     st.markdown("<p style='text-align: center; color: #00d4ff; font-size: 12px;'>● ONLINE</p>", unsafe_allow_html=True)
     
@@ -320,7 +329,7 @@ df = get_data(st.session_state['username'])
 # 1. DASHBOARD
 if selected == T['m_dash']:
     c1, c2 = st.columns([1, 15])
-    with c1: st_lottie(load_lottieurl(LOTTIE_ASSETS['finance']), height=50, key="anim_dash")
+    with c1: safe_lottie("finance", 50, "anim_dash")
     with c2: st.title(T['d_title'])
 
     if df.empty: st.info(T['d_no_data'])
