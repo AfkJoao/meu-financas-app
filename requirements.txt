@@ -1,9 +1,11 @@
 streamlit
 pandas
 plotly
-yfinance
+sqlite3
+bcrypt
 requests
+yfinance
 streamlit-option-menu
 streamlit-aggrid
-bcrypt
 openpyxl
+streamlit-lottie
