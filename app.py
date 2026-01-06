@@ -4,14 +4,14 @@ import plotly.express as px
 import os
 from datetime import date
 
-# --- CONFIGURAÇÃO INICIAL ---
+# --- CONFIGURAÇÃO INICIAL DA PÁGINA ---
 st.set_page_config(page_title="Minhas Finanças Pro", layout="wide")
 
-# Nomes dos arquivos onde os dados serão salvos
+# Nomes dos arquivos onde os dados serão salvos (CSV)
 ARQUIVO_DESPESAS = "despesas.csv"
 ARQUIVO_APORTES = "aportes.csv"
 
-# --- FUNÇÕES PARA LIDAR COM DADOS ---
+# --- FUNÇÕES (O MOTOR DO APP) ---
 def carregar_dados(arquivo, colunas):
     """Carrega os dados do CSV. Se não existir, cria um vazio."""
     if not os.path.exists(arquivo):
@@ -22,11 +22,11 @@ def salvar_dados(df, arquivo):
     """Salva o dataframe atualizado no arquivo CSV."""
     df.to_csv(arquivo, index=False)
 
-# Carregando os dados existentes
+# Carregando os dados existentes ao abrir o app
 df_despesas = carregar_dados(ARQUIVO_DESPESAS, ["Data", "Categoria", "Descrição", "Valor"])
 df_aportes = carregar_dados(ARQUIVO_APORTES, ["Data", "Tipo", "Destino", "Valor"])
 
-# --- BARRA LATERAL (ENTRADA DE DADOS) ---
+# --- BARRA LATERAL (ONDE VOCÊ DIGITA) ---
 st.sidebar.title("💸 Novo Registro")
 tipo_registro = st.sidebar.radio("O que vamos registrar?", ["Despesa", "Aporte/Investimento"])
 
@@ -42,7 +42,7 @@ if tipo_registro == "Despesa":
         df_despesas = pd.concat([df_despesas, nova_linha], ignore_index=True)
         salvar_dados(df_despesas, ARQUIVO_DESPESAS)
         st.sidebar.success("Despesa salva com sucesso!")
-        st.rerun()
+        st.rerun() # Recarrega a página para atualizar o gráfico
 
 else: # Se for Aporte
     st.sidebar.subheader("Novo Aporte")
@@ -58,7 +58,7 @@ else: # Se for Aporte
         st.sidebar.success("Aporte registrado!")
         st.rerun()
 
-# --- ÁREA PRINCIPAL (DASHBOARD) ---
+# --- ÁREA PRINCIPAL (OS GRÁFICOS) ---
 st.title("💰 Painel de Controle Financeiro")
 
 aba1, aba2, aba3 = st.tabs(["📊 Visão Geral de Gastos", "📈 Investimentos & Reserva", "📝 Histórico Detalhado"])
@@ -66,49 +66,56 @@ aba1, aba2, aba3 = st.tabs(["📊 Visão Geral de Gastos", "📈 Investimentos &
 # === ABA 1: GASTOS ===
 with aba1:
     if not df_despesas.empty:
+        # Garantir que a data é data mesmo
         df_despesas["Data"] = pd.to_datetime(df_despesas["Data"])
         df_despesas["Mes"] = df_despesas["Data"].dt.strftime("%Y-%m")
         
         col1, col2 = st.columns(2)
+        
         with col1:
             st.subheader("Evolução Mensal")
+            # Agrupa os gastos por mês
             gastos_por_mes = df_despesas.groupby("Mes")["Valor"].sum().reset_index()
             fig_bar = px.bar(gastos_por_mes, x="Mes", y="Valor", title="Total Gasto por Mês", text_auto=True)
             st.plotly_chart(fig_bar, use_container_width=True)
+            
         with col2:
-            st.subheader("Divisão por Categoria")
+            st.subheader("Para onde foi o dinheiro?")
             fig_pie = px.pie(df_despesas, values="Valor", names="Categoria", hole=0.4)
             st.plotly_chart(fig_pie, use_container_width=True)
             
-        # Métricas Rápidas
         st.divider()
-        total = df_despesas["Valor"].sum()
-        st.metric("Total Gasto (Histórico)", f"R$ {total:,.2f}")
+        total_gasto = df_despesas["Valor"].sum()
+        st.metric("Total já Gasto (Histórico)", f"R$ {total_gasto:,.2f}")
 
     else:
-        st.info("Nenhuma despesa registrada ainda.")
+        st.info("Nenhuma despesa registrada ainda. Use a barra lateral para começar!")
 
 # === ABA 2: INVESTIMENTOS ===
 with aba2:
     st.header("Gestão de Patrimônio")
+    
     col_inv1, col_inv2 = st.columns(2)
     
     with col_inv1:
         st.markdown("### 🧮 Calculadora CDB")
         valor_cdb = st.number_input("Valor Investido (R$)", value=1000.00)
-        taxa_cdi = st.number_input("CDI/Selic (% a.a.)", value=12.15)
-        percentual = st.slider("% do CDI", 80, 150, 100)
+        taxa_cdi = st.number_input("Taxa CDI/Selic (% a.a.)", value=12.15)
+        percentual = st.slider("% do CDI que o banco paga", 80, 150, 100)
         
+        # Matemática Financeira
         rend_anual = valor_cdb * (taxa_cdi/100) * (percentual/100)
-        rend_mensal_liq = (rend_anual / 12) * 0.825 # Aprox IR 17.5%
-        st.success(f"Rendimento Líquido Estimado: R$ {rend_mensal_liq:.2f} / mês")
+        rend_mensal_liq = (rend_anual / 12) * 0.825 # Tira aprox 17.5% de IR
+        
+        st.success(f"Rendimento Líquido Estimado: **R$ {rend_mensal_liq:.2f} / mês**")
 
     with col_inv2:
-        st.markdown("### 🚀 Aportes")
+        st.markdown("### 🚀 Meus Aportes")
         if not df_aportes.empty:
             df_aportes["Data"] = pd.to_datetime(df_aportes["Data"])
             df_aportes["Mes"] = df_aportes["Data"].dt.strftime("%Y-%m")
-            fig_aportes = px.bar(df_aportes, x="Mes", y="Valor", color="Tipo")
+            
+            fig_aportes = px.bar(df_aportes, x="Mes", y="Valor", color="Tipo", title="Evolução dos Aportes")
             st.plotly_chart(fig_aportes, use_container_width=True)
         else:
             st.info("Nenhum aporte registrado.")
@@ -117,8 +124,8 @@ with aba2:
 with aba3:
     col_f1, col_f2 = st.columns(2)
     with col_f1:
-        st.markdown("**Despesas**")
+        st.markdown("**Tabela de Despesas**")
         st.dataframe(df_despesas, use_container_width=True)
     with col_f2:
-        st.markdown("**Aportes**")
+        st.markdown("**Tabela de Aportes**")
         st.dataframe(df_aportes, use_container_width=True)
