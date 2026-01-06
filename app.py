@@ -1,9 +1,3 @@
-# 1. Instala as bibliotecas necessárias (silenciosamente)
-!pip install streamlit pandas plotly openpyxl -q
-
-# 2. Cria o arquivo app.py com o código do seu Dashboard
-# (Usando aspas triplas para escrever o arquivo inteiro de uma vez)
-codigo = '''
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -128,16 +122,3 @@ with aba3:
     with col_f2:
         st.markdown("**Aportes**")
         st.dataframe(df_aportes, use_container_width=True)
-'''
-
-with open("app.py", "w") as f:
-    f.write(codigo)
-
-# 3. Descobre o IP do túnel
-print("⏳ Instalando e iniciando...")
-print("⚠️ COPIE O NÚMERO ABAIXO (IP):")
-!wget -q -O - ipv4.icanhazip.com
-
-# 4. Roda o Streamlit com o fix (-y) para não travar
-print("🚀 Clique no link 'your url is: https://...' abaixo!")
-!streamlit run app.py & npx -y localtunnel --port 8501
